@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Exemplo Básico — Networked-Aframe</title>
+
+    <script src="https://aframe.io/releases/1.7.0/aframe.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.8.1/socket.io.min.js"></script>
+    <script src="/easyrtc/easyrtc.js"></script>
+    <script src="/dist/networked-aframe.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/c-frame/aframe-extras@7.5.4/dist/aframe-extras.controls.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/aframe-environment-component@1.5.0/dist/aframe-environment-component.min.js"></script>
+    <script src="/js/spawn-in-circle.component.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/aframe-randomizer-components@3.0.2/dist/aframe-randomizer-components.min.js"></script>
+
+    <script>
+      NAF.schemas.getComponentsOriginal = NAF.schemas.getComponents;
+      NAF.schemas.getComponents = (template) => {
+        if (!NAF.schemas.hasTemplate('#avatar-template')) {
+          NAF.schemas.add({
+            template: '#avatar-template',
+            components: [
+              { component: 'position', requiresNetworkUpdate: NAF.utils.vectorRequiresUpdate(0.001) },
+              { component: 'rotation', requiresNetworkUpdate: NAF.utils.vectorRequiresUpdate(0.5) },
+              { selector: '.head', component: 'material', property: 'color' }
+            ]
+          });
+        }
+        if (!NAF.schemas.hasTemplate('#rig-template')) {
+          NAF.schemas.add({
+            template: '#rig-template',
+            components: [
+              { component: 'position', requiresNetworkUpdate: NAF.utils.vectorRequiresUpdate(0.001) },
+              { component: 'rotation', requiresNetworkUpdate: NAF.utils.vectorRequiresUpdate(0.5) }
+            ]
+          });
+        }
+        return NAF.schemas.getComponentsOriginal(template);
+      };
+    </script>
+
+    <style>
+      body { margin: 0; overflow: hidden; }
+    </style>
+  </head>
+
+  <body>
+    <a-scene networked-scene="room: basic; debug: true; adapter: wseasyrtc;">
+      <a-assets>
+        <template id="rig-template">
+          <a-entity></a-entity>
+        </template>
+        <template id="avatar-template">
+          <a-entity class="avatar">
+            <a-sphere class="head" scale="0.2 0.22 0.2" random-color></a-sphere>
+            <a-entity class="face" position="0 0.05 0">
+              <a-sphere class="eye" color="white" position="0.06 0.05 -0.16" scale="0.04 0.04 0.04">
+                <a-sphere class="pupil" color="black" position="0 0 -1" scale="0.2 0.2 0.2"></a-sphere>
+              </a-sphere>
+              <a-sphere class="eye" color="white" position="-0.06 0.05 -0.16" scale="0.04 0.04 0.04">
+                <a-sphere class="pupil" color="black" position="0 0 -1" scale="0.2 0.2 0.2"></a-sphere>
+              </a-sphere>
+            </a-entity>
+          </a-entity>
+        </template>
+      </a-assets>
+
+      <a-entity environment="preset: starry; groundColor: #000000;"></a-entity>
+
+      <a-entity id="rig" movement-controls="fly:true;" spawn-in-circle="radius:3" networked="template:#rig-template;">
+        <a-entity
+          id="player"
+          camera
+          position="0 1.6 0"
+          look-controls
+          networked="template:#avatar-template;"
+          visible="false">
+        </a-entity>
+      </a-entity>
+    </a-scene>
+
+    <script>
+      AFRAME.registerComponent('block-placer', {
+        init: function () {
+          this.lastPress = false;
+          this.gridSize = 1; // tamanho da malha
+          this.distance = 3; // distância na frente do jogador onde será colocado o bloco
+        },
+
+        tick: function () {
+          const gamepads = navigator.getGamepads();
+          if (!gamepads) return;
+
+          const gp = gamepads[0];
+          if (!gp) return;
+
+          const buttonX = gp.buttons[2]; // Botão X
+
+          if (buttonX.pressed && !this.lastPress) {
+            this.placeBlock();
+          }
+
+          this.lastPress = buttonX.pressed;
+        },
+
+        placeBlock: function () {
+          const player = document.querySelector('#player');
+          const scene = document.querySelector('a-scene');
+
+          const camera = player.object3D;
+
+          // Direção para frente
+          const direction = new THREE.Vector3(0, 0, -1);
+          direction.applyQuaternion(camera.quaternion);
+
+          const position = new THREE.Vector3();
+          camera.getWorldPosition(position);
+
+          // Ponto na frente do jogador
+          const targetPos = position.clone().add(direction.multiplyScalar(this.distance));
+
+          // Alinhar na malha
+          const gridX = Math.round(targetPos.x / this.gridSize) * this.gridSize;
+          const gridY = Math.round(targetPos.y / this.gridSize) * this.gridSize;
+          const gridZ = Math.round(targetPos.z / this.gridSize) * this.gridSize;
+
+          const block = document.createElement('a-box');
+          block.setAttribute('position', `${gridX} ${gridY} ${gridZ}`);
+          block.setAttribute('width', this.gridSize);
+          block.setAttribute('height', this.gridSize);
+          block.setAttribute('depth', this.gridSize);
+          block.setAttribute('color', '#FFC65D');
+
+          scene.appendChild(block);
+        }
+      });
+
+      document.querySelector('a-scene').setAttribute('block-placer', '');
+    </script>
+  </body>
+</html>
